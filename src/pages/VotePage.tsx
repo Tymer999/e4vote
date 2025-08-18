@@ -107,7 +107,7 @@ const VotePage = () => {
   //   );
   // }
 
-  if (voterVerified || !election) {
+  if (!voterVerified || !election) {
     return (
       <div className="min-h-screen items-center justify-center bg-gray-900 text-white pt-[2rem]">
         <Navbar />
