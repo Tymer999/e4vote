@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import { Link, Navigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { loginUser } from "../firebase/auth";
 import { useNavigate } from "react-router-dom";
 
