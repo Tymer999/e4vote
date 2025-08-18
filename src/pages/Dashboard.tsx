@@ -101,7 +101,7 @@ const Dashboard = () => {
     // Optionally: refresh elections list here
   };
 
-  const [isGettingElection, setIsGettingElection] = useState(false);
+  const [_, setIsGettingElection] = useState(false);
 
   const getUserElections = async () => {
     if (!user) {
@@ -128,19 +128,19 @@ const Dashboard = () => {
     }
   };
 
-  const handleDeleteElection = async () => {
-    if (!manageElectionId) return;
-    try {
-      await deleteElection(manageElectionId);
-      setElections((prev) =>
-        prev.filter((election) => election.id !== manageElectionId)
-      );
-      setManageElectionId(null);
-      setManageElection(null);
-    } catch (error) {
-      console.error("Error deleting election:", error);
-    }
-  };
+  // const handleDeleteElection = async () => {
+  //   if (!manageElectionId) return;
+  //   try {
+  //     await deleteElection(manageElectionId);
+  //     setElections((prev) =>
+  //       prev.filter((election) => election.id !== manageElectionId)
+  //     );
+  //     setManageElectionId(null);
+  //     setManageElection(null);
+  //   } catch (error) {
+  //     console.error("Error deleting election:", error);
+  //   }
+  // };
 
   const handleCloseElection = async () => {
     if (!manageElectionId) return;
