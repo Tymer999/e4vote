@@ -43,8 +43,6 @@ export const addElection = async (data: ElectionData) => {
   const colRef = collection(db, "elections");
   const docRef = await addDoc(colRef, {
     ...data,
-    voters: data.voters || [],
-    aspirants: data.aspirants || [],
   });
   return docRef.id;
 };

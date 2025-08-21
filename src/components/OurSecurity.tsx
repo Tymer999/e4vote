@@ -22,6 +22,7 @@ const OurSecurity = () => {
     },
     // Add more security features as needed
   ];
+  
   return (
     <div className="w-full items-center justify-center bg-[#111827] text-white text-center py-[4rem] px-4">
       <h2 className="text-3xl font-bold max-w-[270px] md:max-w-[370px] mx-auto">Secure and Trustworthy</h2>

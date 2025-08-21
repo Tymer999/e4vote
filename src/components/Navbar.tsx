@@ -39,9 +39,9 @@ const Navbar = () => {
           <li className="hover:text-blue-600">
             <NavLink to={"/help"}>Help</NavLink>
           </li>
-          <li className="hover:text-blue-600">
+          {/* <li className="hover:text-blue-600">
             <NavLink to={"/pricing"}>Pricing</NavLink>
-          </li>
+          </li> */}
         </ul>
 
         <div className="hidden md:flex flex-1 justify-end">
