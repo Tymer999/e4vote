@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { getDoc, doc, collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/firebase.config";
-import Navbar from "../components/Navbar";
+// import Navbar from "../components/Navbar";
 // import Footer from "../components/Footer";
 import { submitVote } from "../firebase/firestore";
 import toast from "react-hot-toast";
+import { FaEyeSlash, FaEye } from "react-icons/fa6";
 
 const VotePage = () => {
   const { electionId } = useParams<{ electionId: string }>();
@@ -15,10 +16,12 @@ const VotePage = () => {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
   const [verifying, setVerifying] = useState(false);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
 
   const [voterVerified, setVoterVerified] = useState(false);
   const [voterCredentials, setVoterCredentials] = useState({
-    email: "",
+    uniqueField: "",
+    password: "",
     electionId: electionId || "",
   });
 
@@ -30,36 +33,41 @@ const VotePage = () => {
       if (!electionId) return;
 
       setLoading(true);
-      const electionRef = doc(db, "elections", electionId);
-      const electionSnap = await getDoc(electionRef);
 
-      if (electionSnap.exists()) {
-        setElection({ id: electionSnap.id, ...electionSnap.data() });
+      try {
+        const electionRef = doc(db, "elections", electionId);
+        const electionSnap = await getDoc(electionRef);
 
-        // Fetch positions subcollection
-        const positionsRef = collection(electionRef, "positions");
-        const positionsSnap = await getDocs(positionsRef);
+        if (electionSnap.exists()) {
+          setElection({ id: electionSnap.id, ...electionSnap.data() });
 
-        const positionsData = await Promise.all(
-          positionsSnap.docs.map(async (posDoc) => {
-            const aspirantsRef = collection(posDoc.ref, "aspirants");
-            const aspirantsSnap = await getDocs(aspirantsRef);
-            return {
-              id: posDoc.id,
-              ...posDoc.data(),
+          // Fetch positions subcollection
+          const positionsRef = collection(electionRef, "positions");
+          const positionsSnap = await getDocs(positionsRef);
 
-              aspirants: aspirantsSnap.docs.map((aDoc) => ({
-                aspirantId: aDoc.id, // Firestore document ID
-                ...aDoc.data(),
-              })),
-            };
-          })
-        );
+          const positionsData = await Promise.all(
+            positionsSnap.docs.map(async (posDoc) => {
+              const aspirantsRef = collection(posDoc.ref, "aspirants");
+              const aspirantsSnap = await getDocs(aspirantsRef);
+              return {
+                id: posDoc.id,
+                ...posDoc.data(),
 
-        setPositions(positionsData);
+                aspirants: aspirantsSnap.docs.map((aDoc) => ({
+                  aspirantId: aDoc.id, // Firestore document ID
+                  ...aDoc.data(),
+                })),
+              };
+            })
+          );
+
+          setPositions(positionsData);
+        }
+      } catch (error) {
+        toast.error("Failed to fetch election data");
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
     fetchElection();
   }, [electionId]);
@@ -85,11 +93,14 @@ const VotePage = () => {
     const votesSnap = await getDocs(votesRef);
 
     const alreadyVoted = votesSnap.docs.find(
-      (doc) => doc.data().voterEmail === voterCredentials.email
+      (doc) => doc.data().uniqueField === voterCredentials.uniqueField
     );
 
-    if (voterCredentials.email === "") {
-      toast.error("Please enter your email to vote.");
+    if (
+      voterCredentials.uniqueField === "" ||
+      voterCredentials.password === ""
+    ) {
+      toast.error("Please enter your email and password to vote.");
       setSubmitting(false);
       return;
     }
@@ -100,10 +111,11 @@ const VotePage = () => {
       return;
     }
 
-    await submitVote(electionId || "", selected, voterCredentials.email);
+    await submitVote(electionId || "", selected, voterCredentials.uniqueField);
 
     setVoterCredentials({
-      email: "",
+      uniqueField: "",
+      password: "",
       electionId: electionId || "",
     });
 
@@ -131,95 +143,131 @@ const VotePage = () => {
   //     </div>
   //   );
   // }
+  const handleVoterVerification = async (e: FormEvent) => {
+    e.preventDefault();
+
+    if (verifying) return;
+
+    setVerifying(true);
+    setVoterError("");
+    try {
+      const electionRef = doc(
+        db,
+        "elections",
+        electionId || voterCredentials.electionId || ""
+      );      
+
+      const electionSnap = await getDoc(electionRef);
+
+      if (!electionSnap.exists()) {
+        toast.error("Election not found");
+        setVoterError("Election not found");
+        setVerifying(false);
+        return;
+      }      
+
+      // Fetch voters subcollection for this election
+      const votersRef = collection(electionRef, "voters");
+
+      const snapshot = await getDocs(votersRef);
+
+      const found = snapshot.docs.find(
+        (doc) => doc.data().uniqueField === voterCredentials.uniqueField
+      );      
+
+      if (found) {
+        // Check if this voter has already voted
+
+        if (found.data().password !== voterCredentials.password) {
+          toast.error("Voter credentials do not match.");
+          setVerifying(false);
+          return;
+        }
+
+        if (!found.data().isVerified) {
+          toast.error("Voter not yet approved by Admin.");
+          setVerifying(false);
+          return;
+        }
+
+        const votesRef = collection(
+          doc(db, "elections", electionId || voterCredentials.electionId || ""),
+          "votes"
+        );
+        const votesSnap = await getDocs(votesRef);        
+
+        const alreadyVoted = votesSnap.docs.find(
+          (doc) => doc.data().uniqueField === voterCredentials.uniqueField
+        );
+        
+
+        if (alreadyVoted) {
+          toast.error("Sorry This email has already voted in this Election");
+          setVerifying(false);
+          return;
+        }
+
+        toast.success("Voter verified successfully. You can now vote.");
+
+        setVoterVerified(true);
+        setElection({ id: electionSnap.id, ...electionSnap.data() });
+
+        // Fetch positions subcollection
+        const positionsRef = collection(electionRef, "positions");
+        const positionsSnap = await getDocs(positionsRef);
+
+        const positionsData = await Promise.all(
+          positionsSnap.docs.map(async (posDoc) => {
+            const aspirantsRef = collection(posDoc.ref, "aspirants");
+            const aspirantsSnap = await getDocs(aspirantsRef);
+            return {
+              id: posDoc.id,
+              ...posDoc.data(),
+
+              aspirants: aspirantsSnap.docs.map((aDoc) => ({
+                aspirantId: aDoc.id, // Firestore document ID
+                ...aDoc.data(),
+              })),
+            };
+          })
+        );
+
+        setPositions(positionsData);
+
+        setVerifying(false);
+      } else {
+        toast.error("Voter not registered for this election.");
+        setVerifying(false);
+      }
+    } catch (error) {
+      toast.error("Failed to verify voter");      
+      setVerifying(false);
+    } finally {
+      setVerifying(false);
+      setVerifying(false);
+    }
+  };
 
   if (!voterVerified || !election) {
     return (
-      <div className="min-h-screen items-center justify-center bg-gray-900 text-white pt-[2rem]">
-        <Navbar />
+      <div className="h-screen items-center justify-center bg-gray-900 text-white">
+        {/* <Navbar /> */}
 
-        <div className="flex items-center justify-center h-[70vh]">
+        <div className="flex items-center justify-center h-full flex-col">
+          <h2 className="text-2xl md:text-3xl font-bold text-blue-600 mb-8 text-center max-w-[90%] mx-auto">
+            {election?.name.toLowerCase().includes("election")
+              ? election?.name
+                  .toLowerCase()
+                  .split("election")[0]
+                  .trim()
+                  .toUpperCase()
+              : election?.name}{" "}
+            ELECTION
+          </h2>
+
           <form
-            className="bg-white/10 p-8 w-[370px] rounded-xl shadow border border-gray-500"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setVerifying(true);
-              setVoterError("");
-              const electionRef = doc(
-                db,
-                "elections",
-                electionId || voterCredentials.electionId || ""
-              );
-              const electionSnap = await getDoc(electionRef);
-
-              if (!electionSnap.exists()) {
-                toast.error("Election not found");
-                setVoterError("Election not found");
-                setVerifying(false);
-                return;
-              }
-
-              // Fetch voters subcollection for this election
-              const votersRef = collection(electionRef, "voters");
-
-              const snapshot = await getDocs(votersRef);
-
-              const found = snapshot.docs.find(
-                (doc) => doc.data().email === voterCredentials.email
-              );
-
-              if (found) {
-                // Check if this voter has already voted
-                const votesRef = collection(
-                  doc(db, "elections", electionId || ""),
-                  "votes"
-                );
-                const votesSnap = await getDocs(votesRef);
-
-                const alreadyVoted = votesSnap.docs.find(
-                  (doc) => doc.data().voterEmail === voterCredentials.email
-                );
-
-                if (alreadyVoted) {
-                  toast.error(
-                    "Sorry This email has already voted in this Election"
-                  );
-                  setVerifying(false);
-                  return;
-                }
-                toast.success("Voter verified successfully. You can now vote.");
-
-                setVoterVerified(true);
-                setElection({ id: electionSnap.id, ...electionSnap.data() });
-
-                // Fetch positions subcollection
-                const positionsRef = collection(electionRef, "positions");
-                const positionsSnap = await getDocs(positionsRef);
-
-                const positionsData = await Promise.all(
-                  positionsSnap.docs.map(async (posDoc) => {
-                    const aspirantsRef = collection(posDoc.ref, "aspirants");
-                    const aspirantsSnap = await getDocs(aspirantsRef);
-                    return {
-                      id: posDoc.id,
-                      ...posDoc.data(),
-
-                      aspirants: aspirantsSnap.docs.map((aDoc) => ({
-                        aspirantId: aDoc.id, // Firestore document ID
-                        ...aDoc.data(),
-                      })),
-                    };
-                  })
-                );
-
-                setPositions(positionsData);
-
-                setVerifying(false);
-              } else {
-                toast.error("Invalid credentials. Please try again.");
-                setVoterError("Invalid credentials. Please try again.");
-                setVerifying(false);
-              }
-            }}
+            className="bg-white/5 p-8 w-[370px] rounded-xl shadow border border-gray-600"
+            onSubmit={handleVoterVerification}
           >
             <h2 className="text-xl font-bold mb-4">Voter Verification</h2>
 
@@ -227,7 +275,7 @@ const VotePage = () => {
               <input
                 type="text"
                 placeholder="Election ID"
-                className="w-full mb-4 px-4 py-2 rounded border border-gray-500 outline-0"
+                className="w-full mb-4 px-4 py-2 md:py-3 rounded border border-gray-600 bg-white/5 outline-0"
                 value={voterCredentials.electionId}
                 onChange={(e) =>
                   setVoterCredentials({
@@ -245,12 +293,12 @@ const VotePage = () => {
             <input
               type="text"
               placeholder={election?.uniqueField || "Email"}
-              className="w-full mb-4 px-4 py-2 rounded border border-gray-500 outline-0"
-              value={voterCredentials.email}
+              className="w-full mb-4 px-4 py-2 md:py-3 rounded border border-gray-600 bg-white/5 outline-0"
+              value={voterCredentials.uniqueField}
               onChange={(e) =>
                 setVoterCredentials({
                   ...voterCredentials,
-                  email: e.target.value,
+                  uniqueField: e.target.value,
                 })
               }
               autoCorrect="off"
@@ -259,12 +307,39 @@ const VotePage = () => {
               required
             />
 
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                className="w-full mb-4 px-4 py-2 md:py-3 rounded border border-gray-600 bg-white/5 outline-0"
+                value={voterCredentials.password}
+                onChange={(e) =>
+                  setVoterCredentials({
+                    ...voterCredentials,
+                    password: e.target.value,
+                  })
+                }
+                autoCorrect="off"
+                autoCapitalize="none"
+                autoComplete="none"
+                required
+              />
+
+              <div className="absolute right-3 top-3 md:top-4">
+                {showPassword ? (
+                  <FaEye onClick={() => setShowPassword(false)} />
+                ) : (
+                  <FaEyeSlash onClick={() => setShowPassword(true)} />
+                )}
+              </div>
+            </div>
+
             {voterError && (
               <div className="text-red-500 mb-2">{voterError}</div>
             )}
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-2 rounded-xl cursor-pointer"
+              className="w-full bg-blue-600 text-white py-2 md:py-3 rounded cursor-pointer mt-2"
             >
               {verifying ? "Verifying..." : "Verify Voter"}
             </button>
@@ -288,10 +363,10 @@ const VotePage = () => {
   };
 
   return (
-    <div className="bg-gradient-to-br from-gray-900 via-blue-900 to-gray-800 min-h-screen pt-[2rem]">
-      <Navbar />
+    <div className="bg-gray-900 from-gray-900 via-blue-900 to-gray-800 min-h-screen pt-[2rem]">
+      {/* <Navbar /> */}
       <main className="max-w-2xl mx-auto py-12 px-4 h-[70vh] flex flex-col justify-center">
-        <h1 className="text-3xl font-bold text-white mb-6 text-center mt-[5rem]">
+        <h1 className="text-3xl font-bold text-blue-600 mb-6 text-center mt-[5rem]">
           {election?.name}
         </h1>
         {election.status === "Pending" ? (
@@ -387,8 +462,8 @@ const VotePage = () => {
                                 </p>
                               </div>
 
-                              <div className="text-white text-xl md:text-3xl font-bold absolute top-2 right-2 rounded-2xl w-[2rem] md:w-[2.25rem] aspect-square bg-white/10 text-center justify-center">
-                                <span>{index + 1}</span>
+                              <div className="text-blue-200 text-xl md:text-3xl font-bold absolute top-2 right-2 rounded-2xl w-[2.55rem] flex items-center md:w-[3.25rem] aspect-square bg-white/10 text-center justify-center">
+                                <span>#{index + 1}</span>
                               </div>
                             </label>
                           )
@@ -407,7 +482,7 @@ const VotePage = () => {
                       disabled={step === 0}
                       onClick={() => setStep((prev) => prev - 1)}
                     >
-                      Submit
+                      Previous
                     </button>
                   )}
                   <button

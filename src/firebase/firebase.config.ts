@@ -7,12 +7,12 @@ import { Firestore, getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyCQ5vkgPITPBTG0dFHI-eV3GaKGMFTaKHM",
+  apiKey: "AIzaSyCQ5vkgPITPBTG0dFHI-xxxxxxxxxxxxxxx",
   authDomain: "evote-ad7f4.firebaseapp.com",
   projectId: "evote-ad7f4",
   storageBucket: "evote-ad7f4.firebasestorage.app",
   messagingSenderId: "621687692562",
-  appId: "1:621687692562:web:56051b53ee96400d9ee7cb"
+  appId: "1:621687692562:web:xxxxxxxxxxxxxxx",
 };
 
 // Initialize Firebase

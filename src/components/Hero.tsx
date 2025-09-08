@@ -21,13 +21,13 @@ const Hero = () => {
       <div className="w-full flex flex-col items-center justify-center h-full px-4 pb-[5rem]">
         <div className="max-w-[50rem] w-full text-center text-white">
           <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold">
-            E4Vote: Effortless, Secure, and Affordable Online Elections
+            Online Voting: Effortless, Secure, and Affordable Online Elections
           </h2>
 
           <div className="w-[80%] mx-auto h-[1px] bg-gray-500 my-4" />
 
           <p className="max-w-xl mx-auto text-xs md:text-sm lg:text-base text-gray-400">
-            EVoting empowers organizations of all sizes to run secure, transparent,
+            Online Voting empowers organizations of all sizes to run secure, transparent,
             and cost-effective elections online. Our platform is designed for
             simplicity and trust, making it easy to manage voters, cast ballots,
             and view results—anytime, anywhere.

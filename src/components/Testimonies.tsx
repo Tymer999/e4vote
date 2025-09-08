@@ -1,16 +1,16 @@
 const Testimonies = () => {
   const testimonials = [
     {
-      text: "E4Vote's security features made it easy for us to audit our election while maintaining the secrecy of each voter's ballot. We had confidence the results accurately reflected the wishes of our voters.",
-      author: "John Doe",
+      text: "Online Voting security features made it easy for us to audit our election while maintaining the secrecy of each voter's ballot. We had confidence the results accurately reflected the wishes of our voters.",
+      author: "Donyina Gabriel",
     },
     {
       text: "The user-friendly interface and robust security measures of E4Vote have transformed the way we conduct elections.",
-      author: "Jane Smith",
+      author: "Albert Asare",
     },
     {
-      text: "E4Vote's commitment to voter privacy and election integrity is truly commendable.",
-      author: "Alice Johnson",
+      text: "Our Online Voting commitment to voter privacy and election integrity is truly commendable.",
+      author: "Afari Kakmel",
     },
   ];  
   return (
@@ -26,7 +26,7 @@ const Testimonies = () => {
             <p className="text-gray-300 mt-2 text-left">
               {item.text}
             </p>
-            <h4 className="text-lg font-semibold mt-6 text-right text-white">{item.author}</h4>
+            <h4 className="text-lg font-semibold mt-6 text-right text-blue-400">{item.author}</h4>
           </article>
         ))}
       </div>

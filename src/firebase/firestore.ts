@@ -9,8 +9,10 @@ import {
   getDocs,
   deleteDoc,
   updateDoc,
+  orderBy,
 } from "firebase/firestore";
 import { db } from "./firebase.config";
+import { type Voter } from "../../types/types";
 
 interface UserData {
   name: string;
@@ -43,6 +45,7 @@ export const addElection = async (data: ElectionData) => {
   const colRef = collection(db, "elections");
   const docRef = await addDoc(colRef, {
     ...data,
+    createdAt: new Date().toISOString(),
   });
   return docRef.id;
 };
@@ -50,7 +53,7 @@ export const addElection = async (data: ElectionData) => {
 // Get all elections created by a specific admin (by UID)
 export const getElectionsByAdmin = async (adminUid: string) => {
   const colRef = collection(db, "elections");
-  const q = query(colRef, where("createdBy", "==", adminUid));
+  const q = query(colRef, where("createdBy", "==", adminUid), orderBy("date", "desc"));
   const snapshot = await getDocs(q);
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 };
@@ -67,6 +70,13 @@ export const closeElection = async (electionId: string) => {
   await updateDoc(docRef, { status: "Completed" });
 };
 
+// get election by ID
+export const getElectionById = async (electionId: string) => {
+  const docRef = doc(db, "elections", electionId);
+  const snapshot = await getDoc(docRef);
+  return snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
+};
+
 // Close  election created by a specific admin (by UID)
 export const updateElection = async (
   electionId: string,
@@ -77,9 +87,15 @@ export const updateElection = async (
 };
 
 // Add a voter to an election
-export const addVoterToElection = async (electionId: string, voter: any) => {
+export const addVoterToElection = async (electionId: string, voter: Voter) => {
   const votersRef = collection(doc(db, "elections", electionId), "voters");
-  await addDoc(votersRef, voter);
+  await addDoc(votersRef, { ...voter, isVerified: false });
+};
+
+// Verify a voter's identity
+export const verifyVoter = async (electionId: string, voterId: string) => {
+  const voterDocRef = doc(db, "elections", electionId, "voters", voterId);
+  await updateDoc(voterDocRef, { isVerified: true });
 };
 
 // get all voters for an election
@@ -138,37 +154,63 @@ export const deletePositionFromElection = async (
   await deleteDoc(positionDocRef);
 };
 
-
-
 // Add a voter to an election
-export const addAspirantToPosition = async (electionId: string, positionId: string, aspirant: any) => {  
-  const aspirantsRef = collection(doc(db, "elections", electionId), "positions", positionId, "aspirants");
+export const addAspirantToPosition = async (
+  electionId: string,
+  positionId: string,
+  aspirant: any
+) => {
+  const aspirantsRef = collection(
+    doc(db, "elections", electionId),
+    "positions",
+    positionId,
+    "aspirants"
+  );
   await addDoc(aspirantsRef, aspirant);
 };
 
 // Get all aspirants for a position in an election
-export const getAspirantsForPosition = async (electionId: string, positionId: string) => {
-  const aspirantsRef = collection(doc(db, "elections", electionId), "positions", positionId, "aspirants");
+export const getAspirantsForPosition = async (
+  electionId: string,
+  positionId: string
+) => {
+  const aspirantsRef = collection(
+    doc(db, "elections", electionId),
+    "positions",
+    positionId,
+    "aspirants"
+  );
   const snapshot = await getDocs(aspirantsRef);
   return snapshot.docs.map((doc) => ({ aspirantId: doc.id, ...doc.data() }));
 };
 
 // Delete an aspirant from a position in an election
-export const deleteAspirantFromPosition = async (electionId: string, positionId: string, aspirantId: string) => {
-  const aspirantDocRef = doc(db, "elections", electionId, "positions", positionId, "aspirants", aspirantId);
+export const deleteAspirantFromPosition = async (
+  electionId: string,
+  positionId: string,
+  aspirantId: string
+) => {
+  const aspirantDocRef = doc(
+    db,
+    "elections",
+    electionId,
+    "positions",
+    positionId,
+    "aspirants",
+    aspirantId
+  );
   await deleteDoc(aspirantDocRef);
 };
-
 
 export const submitVote = async (
   electionId: string,
   voteData: { [positionId: string]: string },
-  voterEmail: string // Optional, if you want to track who voted
+  uniqueField: string // Optional, if you want to track who voted
 ) => {
   const votesRef = collection(doc(db, "elections", electionId), "votes");
   await addDoc(votesRef, {
     selections: voteData,
-    voterEmail: voterEmail,
+    uniqueField: uniqueField,
     timestamp: new Date(),
   });
 };

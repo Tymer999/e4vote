@@ -11,12 +11,23 @@ import Services from "./pages/Services";
 import Pricing from "./pages/Pricing";
 import { Toaster } from "react-hot-toast";
 import Help from "./pages/Help";
+import RegisterVoter from "./pages/RegisterVoter";
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Toaster position="bottom-right" reverseOrder={false} />
+        <Toaster
+          position="bottom-right"
+          reverseOrder={false}
+          toastOptions={{
+            duration: 6000,
+            style: {
+              background: "#333",
+              color: "#fff",
+            },
+          }}
+        />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/home" element={<Home />} />
@@ -27,6 +38,11 @@ function App() {
           <Route path="/vote/:electionId" element={<VotePage />} />
           <Route path="/vote" element={<VotePage />} />
           <Route path="/results/:electionId" element={<Results />} />
+          <Route
+            path="/vote/register/:electionId"
+            element={<RegisterVoter />}
+          />
+          <Route path="/vote/register" element={<RegisterVoter />} />
           <Route path="/results" element={<Results />} />
           <Route path="/services" element={<Services />} />
           <Route path="/pricing" element={<Pricing />} />

@@ -9,8 +9,8 @@ import {
   addAspirantToPosition,
   addElection,
   addPositionToElection,
-  addVoterToElection,
-  closeElection,
+  // addVoterToElection,
+  // closeElection,
   deleteAspirantFromPosition,
   deleteElection,
   deletePositionFromElection,
@@ -20,22 +20,34 @@ import {
   getPositionsForElection,
   getVotersForElection,
   updateElection,
+  verifyVoter,
 } from "../firebase/firestore";
 import { signOutUser } from "../firebase/auth";
 import toast from "react-hot-toast";
+import type { Voter } from "../../types/types";
+import VerificationModal from "../components/VerificationModal";
+
+const voterTabs = [
+  { id: "all", label: "All" },
+  { id: "pending", label: "Pending" },
+  { id: "approved", label: "Approved" },
+];
 
 const Dashboard = () => {
   const navigate = useNavigate();
-
+  const [activeTab, setActiveTab] = useState<string>("all");
   const [manageElectionId, setManageElectionId] = useState<string | null>(null);
   const [manageElection, setManageElection] = useState<any>(null);
   const [selectedPositionId, setSelectedPositionId] = useState<string>("");
   const [file, setFile] = useState<any>(null);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
 
   const electionLink = `${window.location.origin}/vote/${manageElectionId}`;
+  const registrationLink = `${window.location.origin}/vote/register/${manageElectionId}`;
   const electionResultsLink = `${window.location.origin}/results/${manageElectionId}`;
 
-  const { loggedIn, user } = useAuth();
+  const { loggedIn, user, userDetails } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [elections, setElections] = useState<
@@ -43,9 +55,12 @@ const Dashboard = () => {
   >([]);
   const [newElection, setNewElection] = useState({
     name: "",
-    date: new Date().toISOString().slice(0, 10),
+    date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10),
     status: "Pending",
-    uniqueField: "", // Add the unique field here
+    uniqueField: "", // Add the unique field here,
+    verificationPhotoType: "",
   });
   const [loading, setLoading] = useState(false);
   const [newPosition, setNewPosition] = useState("");
@@ -53,10 +68,16 @@ const Dashboard = () => {
   const [showVoterModal, setShowVoterModal] = useState(false);
   const [showPositionModal, setShowPositionModal] = useState(false);
   const [showAspirantModal, setShowAspirantModal] = useState(false);
-  const [newVoter, setNewVoter] = useState({
-    name: "",
-    email: "",
-  });
+  const [selectedVoter, setSelectedVoter] = useState<Voter | null>(null);
+  // const [newVoter, setNewVoter] = useState<Voter>({
+  //   name: "",
+  //   email: "",
+  //   uniqueField: "",
+  //   password: "",
+  //   verificationPhoto: "",
+  //   phone: "",
+  // });
+
   const [newAspirant, setNewAspirant] = useState({
     name: "",
     email: "",
@@ -92,18 +113,29 @@ const Dashboard = () => {
       setLoading(false);
       return;
     }
-    await addElection({
-      ...newElection,
-      createdBy: user.uid,
-    });
-    setLoading(false);
-    setShowModal(false);
-    setNewElection({
-      name: "",
-      date: "",
-      status: "Pending",
-      uniqueField: "",
-    });
+
+    try {
+      await addElection({
+        ...newElection,
+        createdBy: user.uid,
+      });
+      setLoading(false);
+      setShowModal(false);
+      setDataChanged((prev) => !prev);
+      toast.success("Election added successfully");
+      setNewElection({
+        name: "",
+        date: "",
+        status: "Pending",
+        uniqueField: "",
+        verificationPhotoType: "",
+      });
+    } catch (error) {
+      toast.error("Failed to add election");
+    } finally {
+      setLoading(false);
+    }
+
     // Optionally: refresh elections list here
   };
 
@@ -149,26 +181,29 @@ const Dashboard = () => {
   //   }
   // };
 
-  const handleCloseElection = async () => {
-    if (!manageElectionId) return;
-    try {
-      await closeElection(manageElectionId);
-      setElections((prev) =>
-        prev.map((election) =>
-          election.id === manageElectionId
-            ? { ...election, status: "Completed" }
-            : election
-        )
-      );
-      setManageElectionId(null);
-      setManageElection(null);
-    } catch (error) {
-      console.error("Error closing election:", error);
-    }
-  };
+  // const handleCloseElection = async () => {
+  //   if (!manageElectionId) return;
+  //   try {
+  //     await closeElection(manageElectionId);
+  //     setElections((prev) =>
+  //       prev.map((election) =>
+  //         election.id === manageElectionId
+  //           ? { ...election, status: "Completed" }
+  //           : election
+  //       )
+  //     );
+  //     setManageElectionId(null);
+  //     setManageElection(null);
+  //   } catch (error) {
+  //     console.error("Error closing election:", error);
+  //   }
+  // };
 
   const handleSaveElectionChanges = async () => {
     if (!manageElectionId || !manageElection) return;
+
+    // console.log("Managing election:", manageElection);
+
     try {
       await updateElection(manageElectionId, manageElection);
       setElections((prev) =>
@@ -176,6 +211,8 @@ const Dashboard = () => {
           election.id === manageElectionId ? manageElection : election
         )
       );
+      toast.success("Election updated successfully");
+      setDataChanged((prev) => !prev);
       setManageElectionId(null);
       setManageElection(null);
     } catch (error) {
@@ -187,10 +224,14 @@ const Dashboard = () => {
     getUserElections();
   }, [dataChanged]);
 
+  useEffect(() => {
+    getAllVoters();
+  }, [manageElectionId]);
+
   const handleManageElection = (id: string) => {
     const election = elections.find((e) => e.id === id);
 
-    console.log("Managing election:", election);
+    // console.log("Managing election:", election);
 
     setManageElectionId(id);
     setManageElection(election);
@@ -198,52 +239,61 @@ const Dashboard = () => {
 
   const filteredElections = isExpanded ? elections : elections.slice(0, 3);
 
-  const [isAddingVoter, setIsAddingVoter] = useState(false);
+  // const [isAddingVoter, setIsAddingVoter] = useState(false);
   const [isAddingPosition, setIsAddingPosition] = useState(false);
   const [isAddingAspirant, setIsAddingAspirant] = useState(false);
 
-  const handleAddVoter = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newVoter.name || !newVoter.email) {
-      toast.error("Please name and email fields are required");
-      return;
-    }
+  // const handleAddVoter = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   if (!newVoter.name || !newVoter.email) {
+  //     toast.error("Please name and email fields are required");
+  //     return;
+  //   }
 
-    // Check if voter already exists (by email)
-    const alreadyExists = voters.some(
-      (voter) => voter.email?.toLowerCase() === newVoter.email.toLowerCase()
-    );
+  //   // Check if voter already exists (by email)
+  //   const alreadyExists = voters.some(
+  //     (voter) => voter.email?.toLowerCase() === newVoter.email.toLowerCase()
+  //   );
 
-    if (alreadyExists) {
-      toast.error(
-        `A voter with this ${
-          manageElection.uniqueField || "email"
-        } is already registered for this election.`
-      );
-      return;
-    }
+  //   if (alreadyExists) {
+  //     toast.error(
+  //       `A voter with this ${
+  //         manageElection.uniqueField || "email"
+  //       } is already registered for this election.`
+  //     );
+  //     return;
+  //   }
 
-    setIsAddingVoter(true);
-    try {
-      await addVoterToElection(manageElectionId || "", newVoter);
-      toast.success("Voter added successfully");
-      getAllVoters();
-      setNewVoter({ name: "", email: "" });
-    } catch (error) {
-      toast.error(
-        "Failed to add voter" +
-          (typeof error === "string"
-            ? `: ${error}`
-            : error instanceof Error
-            ? `: ${error.message}`
-            : "")
-      );
-    } finally {
-      setIsAddingVoter(false);
-    }
-  };
+  //   setIsAddingVoter(true);
+  //   try {
+  //     await addVoterToElection(manageElectionId || "", newVoter);
+  //     toast.success("Voter added successfully");
 
+  //     getAllVoters();
+
+  //     setNewVoter({
+  //       name: "",
+  //       email: "",
+  //       uniqueField: "",
+  //       password: "",
+  //       verificationPhoto: "",
+  //       phone: "",
+  //     });
+  //   } catch (error) {
+  //     toast.error(
+  //       "Failed to add voter" +
+  //         (typeof error === "string"
+  //           ? `: ${error}`
+  //           : error instanceof Error
+  //           ? `: ${error.message}`
+  //           : "")
+  //     );
+  //   } finally {
+  //     setIsAddingVoter(false);
+  //   }
+  // };
   const [isGettingVoters, setIsGettingVoters] = useState(true);
+
   const getAllVoters = async () => {
     if (!manageElectionId) return;
     try {
@@ -256,11 +306,82 @@ const Dashboard = () => {
     }
   };
 
-  const handleRemoveVoter = async (voterId: string) => {
+  const filterVotersByTab = () => {
+    if (activeTab === "pending") {
+      return voters.filter((voter) => !voter.isVerified);
+    } else if (activeTab === "approved") {
+      return voters.filter((voter) => voter.isVerified);
+    } else {
+      return voters;
+    }
+  };
+
+  const handleRemoveVoter = async (voterId: string, voterEmail: string) => {
     if (!manageElectionId) return;
+
+    const emailData = {
+      adminName: userDetails.name,
+      adminEmail: userDetails.email,
+      recipient: voterEmail,
+      electionLink: electionLink,
+      electionId: manageElectionId,
+      websiteName: "onlinevote.com",
+      electionName: manageElection.name,
+      resultsLink: electionResultsLink,
+    };
+
     try {
       await deleteVoterFromElection(manageElectionId, voterId);
+
+      await fetch(`http://localhost:3000/api/send-declined-email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(emailData),
+      });
+
       toast.success("Voter removed successfully");
+      getAllVoters();
+      setVoters((prev) => prev.filter((voter) => voter.id !== voterId));
+    } catch (error) {
+      toast.error(
+        "Failed to remove voter" +
+          (typeof error === "string"
+            ? `: ${error}`
+            : error instanceof Error
+            ? `: ${error.message}`
+            : "")
+      );
+    }
+  };
+
+  const handleVerifyVoter = async (voterId: string, voterEmail: string) => {
+    if (!manageElectionId) return;
+
+    const emailData = {
+      adminName: userDetails.name,
+      adminEmail: userDetails.email,
+      recipient: voterEmail,
+      electionLink: electionLink,
+      electionId: manageElectionId,
+      websiteName: "onlinevote.com",
+      electionName: manageElection.name,
+      resultsLink: electionResultsLink,
+    };
+
+    try {
+      await fetch(`http://localhost:3000/api/send-approved-email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(emailData),
+      });
+
+      await verifyVoter(manageElectionId, voterId);
+
+      toast.success("Voter verified successfully");
       getAllVoters();
       setVoters((prev) => prev.filter((voter) => voter.id !== voterId));
     } catch (error) {
@@ -471,7 +592,6 @@ const Dashboard = () => {
   };
 
   // Redirect to login if not logged in
-
   if (!loggedIn) {
     return <Navigate to="/login" />;
   }
@@ -526,41 +646,125 @@ const Dashboard = () => {
             <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-xl border border-gray-700 p-8 mb-12 h-[20rem] flex items-center justify-center flex-col gap-2">
               '
               {
-                <h2 className="text-white font-bold text-3xl">
+                <h2 className="text-white font-bold text-xl md:text-3xl">
                   No Election Created Yet
                 </h2>
               }
               <p className="text-gray-300 text-lg">Plese Create An Election</p>
             </div>
           ) : (
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-xl border border-gray-700 p-4 md:p-8 mb-12">
-              <h2 className="text-2xl font-semibold text-white mb-6">
-                {isExpanded ? "All Elections" : "Recent Elections"}
-              </h2>
-              <div className="w-full overflow-x-auto">
-                <table className="min-w-[600px] w-full text-left">
-                  <thead>
-                    <tr>
-                      <th className="text-gray-300 pb-2">Name</th>
-                      <th className="text-gray-300 pb-2">Status</th>
-                      <th className="text-gray-300 pb-2">Date</th>
-                      <th className="text-gray-300 pb-2">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredElections.map((election, idx) => (
-                      <tr
-                        key={idx}
-                        className={`rounded-2xl ${
-                          idx % 2 === 0 ? "bg-white/10" : "bg-white/5"
-                        }`}
+            <div>
+              <div className="bg-white/10 hidden md:block backdrop-blur-md rounded-2xl shadow-xl border border-gray-700 p-4 md:p-8 mb-12">
+                <h2 className="text-2xl font-semibold text-white mb-6">
+                  {isExpanded ? "All Elections" : "Recent Elections"}
+                </h2>
+                <div className="w-full overflow-x-auto">
+                  <table className="min-w-[600px] w-full text-left">
+                    <thead>
+                      <tr>
+                        <th className="text-gray-300 pb-2">Name</th>
+                        <th className="text-gray-300 pb-2">Status</th>
+                        <th className="text-gray-300 pb-2">Date</th>
+                        <th className="text-gray-300 pb-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredElections.map((election, idx) => (
+                        <tr
+                          key={idx}
+                          className={`rounded-2xl ${
+                            idx % 2 === 0 ? "bg-white/10" : "bg-white/5"
+                          }`}
+                        >
+                          <td className="py-4 md:py-8 text-white pl-2 md:pl-4 font-semibold">
+                            {election.name}
+                          </td>
+                          <td className="py-3">
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                election.status === "Completed"
+                                  ? "bg-green-600 text-white"
+                                  : election.status === "Active"
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-yellow-500 text-gray-900"
+                              }`}
+                            >
+                              {election.status}
+                            </span>
+                          </td>
+                          <td className="py-3 text-gray-300">
+                            {election.date}
+                          </td>
+                          <td className="py-3">
+                            <div className="gap-4 flex w-fit">
+                              <button
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-xs font-semibold shadow transition cursor-pointer"
+                                onClick={() =>
+                                  handleManageElection(election.id)
+                                }
+                              >
+                                Manage
+                              </button>
+                              <button
+                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-full text-xs font-semibold shadow transition cursor-pointer"
+                                onClick={async () => {
+                                  if (
+                                    window.confirm(
+                                      "Are you sure you want to remove this election?"
+                                    )
+                                  ) {
+                                    try {
+                                      await deleteElection(election.id);
+                                      setDataChanged((prev) => !prev);
+                                      toast.success(
+                                        "Election removed successfully"
+                                      );
+                                    } catch (error) {
+                                      toast.error("Failed to remove election");
+                                    }
+                                  }
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {elections.length > 3 && (
+                  <div className="mt-8 items-center justify-center flex">
+                    <button
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full text-lg font-semibold shadow transition"
+                      onClick={() => setIsExpanded(!isExpanded)}
+                    >
+                      {isExpanded ? "View Less" : "View All"}
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="md:hidden">
+                <h2 className="text-xl font-semibold text-white text-center mb-4">
+                  Elections
+                </h2>
+                <div className="flex-row gap-4">
+                  {elections.length > 0 &&
+                    elections.map((election) => (
+                      <div
+                        key={election.id}
+                        className="bg-white/5 backdrop-blur-md rounded-2xl shadow-xl border border-gray-700 p-4 mb-4 flex flex-col"
                       >
-                        <td className="py-4 md:py-8 text-white pl-2 md:pl-4 font-semibold">
+                        <h3 className="text-lg font-semibold text-white">
                           {election.name}
-                        </td>
-                        <td className="py-3">
+                        </h3>
+                        <p className="text-sm text-gray-400 mt-2">
+                          {election.date}
+                        </p>
+                        <p className="mt-4">
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-bold ${
+                            className={`px-2 py-1 rounded-full text-xs font-bold ${
                               election.status === "Completed"
                                 ? "bg-green-600 text-white"
                                 : election.status === "Active"
@@ -569,51 +773,44 @@ const Dashboard = () => {
                             }`}
                           >
                             {election.status}
-                          </span>
-                        </td>
-                        <td className="py-3 text-gray-300">{election.date}</td>
-                        <td className="py-3">
-                          <div className="gap-4 flex w-fit">
-                            <button
-                              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-xs font-semibold shadow transition cursor-pointer"
-                              onClick={() => handleManageElection(election.id)}
-                            >
-                              Manage
-                            </button>
-                            <button
-                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-full text-xs font-semibold shadow transition cursor-pointer"
-                              onClick={async () => {
+                          </span>{" "}
+                        </p>
+
+                        <div className="flex flex-row mt-4 items-center justify-end gap-2 w-full">
+                          <button
+                            className="mt-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-xs font-semibold shadow transition cursor-pointer"
+                            onClick={() => handleManageElection(election.id)}
+                          >
+                            Manage
+                          </button>
+
+                          <button
+                            className="mt-auto bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-full text-xs font-semibold shadow transition cursor-pointer"
+                            onClick={async () => {
+                              if (
+                                window.confirm(
+                                  "Are you sure you want to remove this election?"
+                                )
+                              ) {
                                 try {
                                   await deleteElection(election.id);
                                   setDataChanged((prev) => !prev);
-
                                   toast.success(
                                     "Election removed successfully"
                                   );
                                 } catch (error) {
                                   toast.error("Failed to remove election");
                                 }
-                              }}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                              }
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-              {elections.length > 3 && (
-                <div className="mt-8 items-center justify-center flex">
-                  <button
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full text-lg font-semibold shadow transition"
-                    onClick={() => setIsExpanded(!isExpanded)}
-                  >
-                    {isExpanded ? "View Less" : "View All"}
-                  </button>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -658,7 +855,7 @@ const Dashboard = () => {
               required
             />
 
-            {/* <p className="text-sm text-gray-400 mb-2">
+            <p className="text-sm text-gray-400 mb-2">
               You can specify a unique identifier for voters in this election
               (e.g., Index Number, Voter ID, Employee ID). This will be used for
               voter verification when voting. If left blank, Email will be used
@@ -666,15 +863,28 @@ const Dashboard = () => {
             </p>
             <input
               type="text"
-              placeholder="Unique Field"
+              placeholder="Unique Identifier"
               className="w-full mb-4 px-4 py-2 rounded border border-gray-500 outline-0"
               value={newElection.uniqueField}
               onChange={(e) =>
                 setNewElection({ ...newElection, uniqueField: e.target.value })
               }
               required
-            /> */}
-
+            />
+            
+            <p className="text-sm text-gray-400 mb-2">
+             Which Verification Photo would you like to use for voter verification? (eg: Student ID, National ID, Driver's License, Employee ID)
+            </p>
+            <input
+              type="text"
+              placeholder="Verification Photo Type"
+              className="w-full mb-4 px-4 py-2 rounded border border-gray-500 outline-0"
+              value={newElection.verificationPhotoType}
+              onChange={(e) =>
+                setNewElection({ ...newElection, verificationPhotoType: e.target.value })
+              }
+              required
+            />
 
             {/* <input
               type="date"
@@ -766,23 +976,26 @@ const Dashboard = () => {
                   setManageElection({ ...manageElection, date: e.target.value })
                 }
               />
-              <select
-                className="w-full mb-4 px-4 py-2 rounded border border-gray-500 outline-0"
-                value={manageElection.status}
-                onChange={(e) =>
-                  setManageElection({
-                    ...manageElection,
-                    status: e.target.value,
-                  })
-                }
-              >
-                <option value="Pending">Pending</option>
-                <option value="Active">Active</option>
-                <option value="Completed">Completed</option>
-              </select>
+              <div className="mb-4 px-4 h-[2.55rem] items-center flex rounded border border-gray-500 ">
+                <select
+                  className="w-full outline-0 h-full"
+                  value={manageElection.status}
+                  onChange={(e) =>
+                    setManageElection({
+                      ...manageElection,
+                      status: e.target.value,
+                    })
+                  }
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Active">Active</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
 
               {/* Actions */}
-              <div className="flex gap-2 justify-center mt-4 flex-wrap">
+
+              <div className="flex flex-wrap gap-2 justify-end-safe items-center mt-4">
                 <button
                   type="button"
                   className="px-4 py-2 rounded bg-green-600 text-white cursor-pointer"
@@ -790,84 +1003,117 @@ const Dashboard = () => {
                 >
                   Save Changes
                 </button>
-                {/* <button
-                  type="button"
-                  className="px-4 py-2 rounded bg-red-600 text-white cursor-pointer"
-                  onClick={handleDeleteElection}
-                >
-                  Delete
-                </button> */}
-                <button
-                  type="button"
-                  className="px-4 py-2 rounded bg-blue-800 text-white cursor-pointer"
-                  onClick={handleCloseElection}
-                >
-                  Close Election
-                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded bg-gray-700 text-white cursor-pointer"
+                    // onFocus={() => setShowActionsMenu(true)}
+                    onClick={() => setShowActionsMenu((prev) => !prev)}
+                    // onBlur={() => setShowActionsMenu(false)}
+                  >
+                    {showActionsMenu ? "Hide Actions" : "More Actions"}
+                  </button>
+                  {showActionsMenu && (
+                    <div className="absolute z-10 right-0 cursor-pointer mt-2 w-56 bg-[#182439] border border-gray-500 rounded shadow-lg flex flex-col">
+                      <button
+                        type="button"
+                        className="px-4 py-2 text-left cursor-pointer hover:bg-blue-600 hover:text-white transition"
+                        onClick={() => {
+                          navigator.clipboard.writeText(electionLink);
+                          setShowActionsMenu(false);
+                          toast.success("Election link copied!");
+                        }}
+                      >
+                        Copy Election Link
+                      </button>
+                      <button
+                        type="button"
+                        className="px-4 py-2 text-left cursor-pointer hover:bg-orange-600 hover:text-white transition"
+                        onClick={() => {
+                          navigator.clipboard.writeText(electionResultsLink);
+                          setShowActionsMenu(false);
+                          toast.success("Election Results Link copied!");
+                        }}
+                      >
+                        Copy Result Link
+                      </button>
+                      <button
+                        type="button"
+                        className="px-4 py-2 text-left cursor-pointer hover:bg-orange-600 hover:text-white transition"
+                        onClick={() => {
+                          navigator.clipboard.writeText(registrationLink);
+                          setShowActionsMenu(false);
+                          toast.success("Registration Link copied!");
+                        }}
+                      >
+                        Copy Registration Link
+                      </button>
+                      <button
+                        type="button"
+                        className="px-4 py-2 text-left cursor-pointer hover:bg-orange-400 hover:text-white transition"
+                        onClick={() => {
+                          navigator.clipboard.writeText(manageElectionId);
+                          setShowActionsMenu(false);
+                          toast.success("Election ID copied!");
+                        }}
+                      >
+                        Copy Election ID
+                      </button>
+                      <button
+                        type="button"
+                        className={`px-4 py-2 text-left cursor-pointer hover:bg-green-700 hover:text-white transition ${
+                          emailSending
+                            ? "opacity-50 cursor-not-allowed bg-green-700"
+                            : ""
+                        }`}
+                        onClick={async () => {
+                          const allVotersEmails = voters.map(
+                            (voter) => voter.email
+                          );
+                          const emailData = {
+                            adminName: userDetails.name,
+                            adminEmail: userDetails.email,
+                            recipients: allVotersEmails,
+                            electionLink: electionLink,
+                            electionId: manageElectionId,
+                            websiteName: "onlinevote.com",
+                            electionName: manageElection.name,
+                            resultsLink: electionResultsLink,
+                          };
 
-                <button
-                  type="button"
-                  className="bg-blue-600 text-white px-4 py-2 rounded cursor-pointer"
-                  onClick={() => {
-                    navigator.clipboard.writeText(electionLink);
-                    toast.success("Election link copied!");
-                  }}
-                >
-                  Copy Election Link
-                </button>
-                <button
-                  type="button"
-                  className="bg-orange-600 text-white px-4 py-2 rounded cursor-pointer"
-                  onClick={() => {
-                    navigator.clipboard.writeText(electionResultsLink);
-                    toast.success("Election results link copied!");
-                  }}
-                >
-                  Copy Result Link
-                </button>
-                <button
-                  type="button"
-                  className="bg-orange-400 text-white px-4 py-2 rounded cursor-pointer"
-                  onClick={() => {
-                    navigator.clipboard.writeText(manageElectionId);
-                    toast.success("Election ID copied!");
-                  }}
-                >
-                  Copy Election ID
-                </button>
+                          setEmailSending(true);
 
-                <button
-                  type="button"
-                  className="bg-green-700 text-white px-4 py-2 rounded cursor-pointer"
-                  onClick={async () => {
-                    // Fetch voters for this election
-                    const votersData = await getVotersForElection(
-                      manageElectionId
-                    );
-                    if (!votersData || votersData.length === 0) {
-                      toast.error("No voters registered for this election.");
-                      return;
-                    }
-                    // Collect all emails
-                    const emails = votersData
-                      .map((v: any) => v.email)
-                      .filter(Boolean);
-                    // Prepare mailto link
-                    const subject = encodeURIComponent("Your Election Link");
-                    const body = encodeURIComponent(
-                      `Dear Voter,\n\nYou are invited to participate in the election.\n\nPlease use the following link to cast your vote:\n${electionLink}\n \nOr You can also visit our website to vote\nhttp://google.com\n use the following Election ID: ${manageElectionId}\n\nThank you! \nBest regards,\nYour Election Team`
-                    );
-                    // Open mail client with all emails in BCC
-                    window.location.href = `mailto:?bcc=${emails.join(
-                      ","
-                    )}&subject=${subject}&body=${body}`;
-                  }}
-                >
-                  Send Email to All Voters
-                </button>
+                          try {
+                            await fetch(
+                              `http://localhost:3000/api/send-email`,
+                              {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify(emailData),
+                              }
+                            );
 
+                            setEmailSending(false);
+
+                            toast.success("Emails sent successfully!");
+                          } catch (error) {
+                            toast.error("Failed to send emails.");
+                          } finally {
+                            setShowActionsMenu(false);
+                            setEmailSending(false);
+                          }
+                        }}
+                      >
+                        {emailSending
+                          ? "Sending..."
+                          : "Send Email to All Voters"}
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <button
-                  type="button"
                   className="px-4 py-2 rounded bg-gray-700 cursor-pointer"
                   onClick={() => setManageElectionId(null)}
                 >
@@ -879,13 +1125,16 @@ const Dashboard = () => {
         )}
 
       {showVoterModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-gray-900 md:bg-black/50 flex flex-col items-center justify-center z-50">
+          <h2 className="md:hidden font-bold text-blue-600 text-3xl mb-6 mx-auto max-w-[80%] text-center">
+            {manageElection.name}
+          </h2>
           <form
-            onSubmit={handleAddVoter}
-            className="bg-[#182439] text-white border border-gray-500 rounded-xl p-6 shadow-xl w-[90%] max-w-md"
+            // onSubmit={handleAddVoter}
+            className="bg-[#182439] text-white border border-gray-500 rounded-xl p-4 md:p-6 shadow-xl w-[90%] max-w-lg"
           >
-            <h2 className="text-xl font-bold mb-4">Register Voter</h2>
-            <input
+            <h2 className="text-xl font-bold mb-4">Manage Voters</h2>
+            {/* <input
               type="text"
               placeholder="Name"
               className="w-full mb-4 px-4 py-2 rounded border border-gray-500 outline-0"
@@ -904,18 +1153,20 @@ const Dashboard = () => {
                 setNewVoter({ ...newVoter, email: e.target.value })
               }
               required
-            />
+            /> */}
 
-            {manageElection.uniqueField && <input
-              type={ "password"}
-              placeholder={"Password"}
-              className="w-full mb-4 px-4 py-2 rounded border border-gray-500 outline-0"
-              value={newVoter.email}
-              onChange={(e) =>
-                setNewVoter({ ...newVoter, email: e.target.value })
-              }
-              required
-            />}
+            {/* {manageElection.uniqueField && (
+              <input
+                type={"password"}
+                placeholder={"Password"}
+                className="w-full mb-4 px-4 py-2 rounded border border-gray-500 outline-0"
+                value={newVoter.email}
+                onChange={(e) =>
+                  setNewVoter({ ...newVoter, email: e.target.value })
+                }
+                required
+              />
+            )} */}
             {/* <input
               type="text"
               placeholder="Phone"
@@ -925,7 +1176,166 @@ const Dashboard = () => {
                 setNewVoter({ ...newVoter, phone: e.target.value })
               }
             /> */}
-            <div className="flex gap-2 justify-end mb-4">
+
+            <div className="flex-row items-center mb-4">
+              {voterTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`px-4 py-2 cursor-pointer transition-all mr-2 rounded ${
+                    activeTab === tab.id
+                      ? "bg-blue-600 hover:bg-blue-700 text-white"
+                      : "bg-gray-700 hover:bg-gray-800 text-gray-300"
+                  }`}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <div className="max-h-[50vh] overflow-y-auto border rounded-xl px-2 bg-white/5 border-gray-500">
+              {/* {voters.length === 0 && (
+                <div className="text-gray-400 text-sm">
+                  No voters registered yet.
+                </div>
+              )} */}
+              {isGettingVoters ? (
+                <div className="text-gray-400 text-sm min-h-[5vh] flex items-center justify-center">
+                  <span>Loading voters...</span>
+                </div>
+              ) : filterVotersByTab().length === 0 ? (
+                <div className="text-gray-400 text-sm">
+                  No voters registered yet.
+                </div>
+              ) : (
+                filterVotersByTab().map((voter, idx) => (
+                  <div
+                    key={idx}
+                    className="flex justify-between items-start py-4 border-b border-gray-600"
+                  >
+                    <div
+                      className="flex-row flex gap-4"
+                      onClick={() => {
+                        setSelectedVoter(voter);
+                      }}
+                    >
+                      <img
+                        src={voter.verificationPhoto}
+                        alt={voter.name}
+                        className="w-12 h-12 rounded-full"
+                      />
+                      <div>
+                        <span className="text-sm">
+                          {voter.name} ({voter.uniqueField || voter.phone})
+                        </span>
+
+                        <div>
+                          <span className="text-sm text-gray-400">
+                            {voter.email}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {!voter.isVerified ? (
+                      <div className="flex gap-1 md:gap-3 flex-col md:flex-row mt-1 items-end md:items-center">
+                        <button
+                          type="button"
+                          className="text-xs text-green-600 cursor-pointer"
+                          onClick={async () => {
+                            if (
+                              window.confirm(
+                                `Are you sure you want to decline ${voter.name}?`
+                              )
+                            ) {
+                              await handleVerifyVoter(
+                                voter.voterId,
+                                voter.email
+                              );
+                            }
+                            // else do nothing (cancel)
+                          }}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs text-red-600 cursor-pointer"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Are you sure you want to decline ${voter.name}?`
+                              )
+                            ) {
+                              handleRemoveVoter(voter.voterId, voter.email);
+                            }
+                            // else do nothing (cancel)
+                          }}
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-xs text-red-600 cursor-pointer mt-1"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Are you sure you want to decline ${voter.name}?`
+                            )
+                          ) {
+                            handleRemoveVoter(voter.voterId, voter.email);
+                          }
+                          // else do nothing (cancel)
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
+
+                    {selectedVoter && (
+                      <VerificationModal
+                        isOpen={!!selectedVoter}
+                        onClose={() => {
+                          setSelectedVoter(null);
+                        }}
+                        voter={selectedVoter}
+                        onVerify={() => {
+                          if (
+                            window.confirm(
+                              `Are you sure you want to decline ${selectedVoter.name}?`
+                            )
+                          ) {
+                            handleVerifyVoter(
+                              voter.voterId,
+                              selectedVoter.email
+                            );
+                            setSelectedVoter(null);
+                          }
+                        }}
+                        electionName={manageElection.name}
+                        onDecline={() => {
+                          {
+                            if (
+                              window.confirm(
+                                `Are you sure you want to decline ${selectedVoter.name}?`
+                              )
+                            ) {
+                              handleRemoveVoter(voter.voterId, voter.email);
+                              setSelectedVoter(null);
+                            }
+                            // else do nothing (cancel)
+                          }
+                        }}
+                      />
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex gap-2 justify-end mt-8">
               <button
                 type="button"
                 className="px-4 py-2 rounded bg-gray-700 cursor-pointer"
@@ -937,45 +1347,12 @@ const Dashboard = () => {
               >
                 Close
               </button>
-              <button
+              {/* <button
                 type="submit"
                 className="px-4 py-2 rounded bg-blue-600 text-white cursor-pointer"
               >
                 {isAddingVoter ? "Adding..." : "Add Voter"}
-              </button>
-            </div>
-            <h3 className="font-semibold mb-2">All Voters</h3>
-            <div className="max-h-40 overflow-y-auto border rounded p-2 bg-gray-700 border-gray-500">
-              {/* {voters.length === 0 && (
-                <div className="text-gray-400 text-sm">
-                  No voters registered yet.
-                </div>
-              )} */}
-              {isGettingVoters ? (
-                <div className="text-gray-400 text-sm">Loading voters...</div>
-              ) : voters.length === 0 ? (
-                <div className="text-gray-400 text-sm">
-                  No voters registered yet.
-                </div>
-              ) : (
-                voters.map((voter, idx) => (
-                  <div
-                    key={idx}
-                    className="flex justify-between items-center py-2 border-b border-gray-700"
-                  >
-                    <span className="text-sm">
-                      {voter.name} ({voter.email || voter.phone})
-                    </span>
-                    <button
-                      type="button"
-                      className="text-xs text-red-600 cursor-pointer"
-                      onClick={() => handleRemoveVoter(voter.voterId)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))
-              )}
+              </button> */}
             </div>
           </form>
         </div>
@@ -1041,7 +1418,10 @@ const Dashboard = () => {
                         type="button"
                         className="text-xs text-red-600 cursor-pointer"
                         onClick={() => {
-                          handleRemovePosition(position.positionId, position.position);
+                          handleRemovePosition(
+                            position.positionId,
+                            position.position
+                          );
                         }}
                       >
                         Remove

@@ -36,7 +36,7 @@ const Login = () => {
   return (
     <div className="bg-gradient-to-br from-gray-900 via-blue-900 to-gray-800 pt-[2rem]">
       <Navbar />
-      <main className="min-h-[80vh] flex items-center justify-center bg-gradient-to-br from-gray-900">
+      <main className="min-h-[92vh] flex items-center justify-center ">
         <div className="bg-white/10 rounded-2xl shadow-2xl p-4 md:p-8 sm:p-12 w-full max-w-md border border-gray-700 mx-[1rem]">
           <h2 className="text-3xl font-bold text-white mb-6 text-center">
             Sign in to your account
@@ -114,7 +114,7 @@ const Login = () => {
           </p>
         </div>
       </main>
-      <Footer />
+      {/* <Footer /> */}
     </div>
   );
 };

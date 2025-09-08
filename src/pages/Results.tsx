@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { db } from "../firebase/firebase.config";
 import { doc, collection, getDocs, getDoc } from "firebase/firestore";
-import Navbar from "../components/Navbar";
-import Footer from "../components/Footer";
+// import Navbar from "../components/Navbar";
+// import Footer from "../components/Footer";
 
 const Results = () => {
   const { electionId } = useParams<{ electionId: string }>();
@@ -95,23 +95,23 @@ const Results = () => {
     );
   }
 
-  console.log(election.status);
+  // console.log(election.status);
 
   return (
-    <div className="bg-gradient-to-br from-gray-900 via-blue-900 to-gray-800 min-h-screen pt-[2rem]">
-      <Navbar />
+    <div className="bg-gray-900 from-gray-900 min-h-screen">
+      {/* <Navbar /> */}
       {election.status !== "Completed" ? (
-        <div className="h-[70vh] items-center justify-center max-w-2xl m-auto py-12 px-4 flex flex-col">
+        <div className="h-[100vh] items-center justify-center max-w-2xl m-auto py-12 px-4 flex flex-col">
           <h1 className="text-3xl font-bold text-white mb-6 text-center">
             {election ? election.name + " RESULTS" : "Election Results"}
           </h1>
           <h2 className="text-2xl font-semibold text-red-500 text-center mb-4">
-            Election has not yet been completed.
+            Election still ongoing.
           </h2>
         </div>
       ) : (
         <main className="max-w-2xl mx-auto py-12 px-4 min-h-[70vh]">
-          <h1 className="text-3xl font-bold text-white mb-6 text-center">
+          <h1 className="text-3xl font-bold text-blue-600 mb-6 text-center">
             {election ? election.name + " RESULTS" : "Election Results"}
           </h1>
           {positions.map((position) => {
@@ -124,7 +124,7 @@ const Results = () => {
             return (
               <div
                 key={position.id}
-                className="mb-8 bg-white/10 rounded-xl p-6 shadow"
+                className="mb-8 bg-white/5 rounded-xl p-4 md:p-6 shadow"
               >
                 <h2 className="text-xl font-semibold text-blue-300 mb-4">
                   {position.position}
@@ -172,11 +172,11 @@ const Results = () => {
                           <td className="py-2 md:py-3 text-white w-[35%] md:text-lg font-semibold">
                             {aspirant.name}
                           </td>
-                          <td className="py-2 md:py-3 text-blue-400 font-bold w-[20%] text-2xl md:text-3xl">
+                          <td className="py-2 md:py-3 text-blue-400 font-bold w-[20%] text-xl md:text-2xl">
                             {votes}
                           </td>
                           <td
-                            className={`py-2 md:py-3 text-green-400 text-2xl md:text-3xl font-bold w-[20%] text-center ${
+                            className={`py-2 md:py-3 text-green-400 text-xl md:text-2xl font-bold w-[20%] text-center ${
                               isFirst ? "rounded-tr-3xl" : ""
                             } ${isLast ? "rounded-br-3xl" : ""}`}
                           >
@@ -192,7 +192,7 @@ const Results = () => {
           })}
         </main>
       )}
-      <Footer />
+      {/* <Footer /> */}
     </div>
   );
 };

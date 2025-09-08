@@ -1,1 +1,20 @@
 @import "tailwindcss";
+
+body {
+  background-color: #101828; /* Dark background */
+}
+
+/* Custom style for date input arrow */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1); /* Makes the icon white */
+}
+
+/* For Firefox */
+input[type="date"]::-moz-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+/* For Edge */
+input[type="date"]::-ms-input-placeholder {
+  color: #fff;
+}

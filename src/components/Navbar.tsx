@@ -13,7 +13,7 @@ const Navbar = () => {
 
 
       <NavLink to="/" className="flex items-center gap-2 flex-1">
-        <h2 className="font-bold text-lg text-blue-500">Evote-Group4</h2>
+        <h2 className="font-bold text-lg text-blue-500">Online Voting</h2>
       </NavLink>
 
         {/* Hamburger for mobile */}
